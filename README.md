@@ -1,6 +1,8 @@
 # team6
 
 Hello, it is the repository to get familiar with my code, of course it contains small dataset.
+Sorry for long code.
+The key part, which I want to edit are strings 180-184.
 
 My purpose of paricipating in workshop utilize data-parallelism in gpu training, based on existing TF tools (tf.distribute.Strategy) or maybe Horovod. 
 If it is needed I will rewrite code on torch.

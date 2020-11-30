@@ -31,7 +31,7 @@ print('Record_data_flag=', Record_data_flag)
 
 # %%   dataset loading
 dataset_to_load_name='dataset'
-dataset_to_load_name='dataset_vl_gen'
+# dataset_to_load_name='dataset_vl_gen'
 data_path=local_dataset_path+dataset_to_load_name
 # Nn=-1
 Nn=30
@@ -175,13 +175,17 @@ if flag_train_model == True:
     print(opt)
     print(opt.lr)
     model.compile(loss='mse', optimizer=opt, metrics=metrics)
+    hvd.init()
+
     print('start of training')
-    if flag_input_pipeline=='tfdataset':
-        history=model.fit(x=x_train_,y=t_train_,
-            validation_data=(x_valid_,t_valid_),
-            batch_size=batch_size,
-            epochs=pars_h['epochs'],
-            verbose=2,shuffle=True,callbacks=Callbacks)
+    T3 = datetime.datetime.now()
+    history=model.fit(x=x_train_,y=t_train_,
+        validation_data=(x_valid_,t_valid_),
+        batch_size=batch_size,
+        epochs=pars_h['epochs'],
+        verbose=2,shuffle=True,callbacks=Callbacks)
+    T4 = datetime.datetime.now()
+    print('Training time', T4 - T3)
     history = history.history
     F_save_history_to_file(history,Keras_models_path,log_save_const)
     Model_to_load_const=log_save_const
@@ -192,8 +196,6 @@ else:
     predict_using_model=1
 
 print('predictions')
-flag_input_pipeline='tfdataset'
-
 if flag_do_scaling==1:
     t_predicted_train_ =model.predict(x_train_,verbose=1)
     t_predicted_valid_ =model.predict(x_valid_,verbose=1)

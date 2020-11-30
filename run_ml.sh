@@ -10,6 +10,7 @@ echo $LD_LIBRARY_PATH
 ################# for machine learning
 module load anaconda3/4.4.0
 module load tensorflow/2.0.0-cuda10.0-cudnn7.6-py3.7
+module load horovod/2019
 srun python main.py
 
 # ls ./gpu_fwi/results/training_data_10_it_old_16_11/ | wc -l

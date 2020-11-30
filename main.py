@@ -1,20 +1,30 @@
 ########## Direct Data input in model.fit version
 import sys
+print(sys.executable)
 from F_modules import *
 #from F_functions import *
 from F_plotting import *
 from F_utils import *
 from F_models import *
-tf.compat.v1.enable_eager_execution()
+
+# tf.compat.v1.enable_eager_execution()         #for tf 2
 # %%     init paths parameters
 Save_pictures_path,local_dataset_path,Keras_models_path = F_init_paths()
 Record_data_flag='read_data_time_domain2'
 
 # Load pretrained CNN weights=0,train CNN=1
 flag_train_model = 1
+flag_single_gpu=0
 if flag_train_model==0:
     Model_to_load_const=1463
-
+if flag_single_gpu==0:
+    import horovod.tensorflow.keras as hvd
+    hvd.init()
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    if gpus:
+        tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 #  Start logging to file
 log_save_const = F_calculate_log_number(Save_pictures_path, 'log', '')
 Save_pictures_path = Save_pictures_path + '/log' + str(log_save_const)
@@ -31,10 +41,10 @@ print('Record_data_flag=', Record_data_flag)
 
 # %%   dataset loading
 dataset_to_load_name='dataset'
-# dataset_to_load_name='dataset_vl_gen'
+dataset_to_load_name='dataset_vl_gen'
 data_path=local_dataset_path+dataset_to_load_name
 # Nn=-1
-Nn=30
+Nn=10000
 if os.path.exists(data_path):
     print('Start loading of dataset ' + data_path)       
     files_all=fnmatch.filter(os.listdir(data_path),'*.npz')
@@ -93,15 +103,15 @@ print('Models for training:',  len(Train_models), ' out of ',N, 'Overall models'
 print('Models for validation:',len(Valid_models), ' out of ',N, 'Overall models')
 print('Models for testing:',   len(Test_models), ' out of ',N, 'Overall models')
 # %%   CNN hyperparameters
-batch_size=1
-epochs=2
+batch_size=2
+epochs=30
 test_status=0
 #   data loader for training, validation
 training_generator=DataLoader(list_train,batch_size,shuffle=True,   to_fit=True)
 validation_generator=DataLoader(list_valid,batch_size,shuffle=True, to_fit=True)
 testing_generator=DataLoader(list_test,batch_size=1,shuffle=True,to_fit=True)
 
-pars_h={'epochs':epochs,'batch_size':batch_size,'learning_rate':1e-07,
+pars_h={'epochs':epochs,'batch_size':batch_size,'learning_rate':0.001,
           'training_type': 2, 'loss': 'mse',
           'patch_sz_x':training_generator.Nx_in,'patch_sz_z':training_generator.Nz_in, 
           'strides_x':training_generator.Nx_in, 'strides_z': training_generator.Nz_in,
@@ -117,9 +127,9 @@ log_dir = "logs/profile/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1,profile_batch='10, 15')
 checkpoint = ModelCheckpoint(Keras_models_path + '/weights_best' + str(log_save_const) + '.hdf5', verbose=1,
     monitor='val_loss',mode='min',save_best_only=save_best_only, save_weights_only=True,save_freq='epoch')
-Callbacks = [terminate,checkpoint,early_stopping]  #add early_stopping??
+# Callbacks = [terminate,checkpoint,early_stopping]  #add early_stopping??
 # Callbacks = [terminate,checkpoint,early_stopping,tensorboard_callback]  #add early_stopping??
-# Callbacks = [terminate,checkpoint]  #add early_stopping??
+Callbacks = [terminate,checkpoint]  #add early_stopping??
 print(pars_h);  print(Callbacks)
 # %%     DL MODEL initialization
 input_shape=(training_generator.Nx_in,training_generator.Nz_in,1)
@@ -141,7 +151,8 @@ x_test=data_test[0]
 t_test=data_test[1]
 flag_do_scaling=1
 if flag_do_scaling==1:
-    from sklearn.externals.joblib import dump,load
+    # from sklearn.externals.joblib import dump,load
+    from joblib import dump,load
     if flag_train_model==1:
         x_train_,scaler_x=scaling_data(x_train)
         x_valid_=transforming_data(x_valid,scaler_x)
@@ -170,23 +181,74 @@ else:
        
 if flag_train_model == True:
     metrics=['MAPE',coeff_determination]
-    opt=tf.keras.optimizers.Nadam()
-    # opt=tf.keras.optimizers.SGD(learning_rate=pars_h['learning_rate'])
-    print(opt)
-    print(opt.lr)
-    model.compile(loss='mse', optimizer=opt, metrics=metrics)
-    hvd.init()
+    train_dataset = tf.data.Dataset.from_tensor_slices((x_train_,t_train_))
+    valid_dataset = tf.data.Dataset.from_tensor_slices((x_valid_,t_valid_))
+    train_dataset=train_dataset.shuffle(Nn+2000).batch(batch_size)
+    valid_dataset=valid_dataset.shuffle(Nn+2000).batch(batch_size)
+    if flag_single_gpu==1:
+        opt=tf.keras.optimizers.Nadam(learning_rate=pars_h['learning_rate'])
+        # opt=tf.keras.optimizers.SGD(learning_rate=pars_h['learning_rate'])
+        print(opt)
+        print(opt.lr)
+        model.compile(loss='mse', optimizer=opt, metrics=metrics)
+        # model.fit(dataset, steps_per_epoch=500 // hvd.size(), callbacks=callbacks, epochs=24, verbose=verbose)
+        # model.fit(dataset=train_dataset,validation_data=valid_dataset,steps_per_epoch=500 // hvd.size(), callbacks=callbacks, epochs=24, verbose=verbose)
+        print('start of training')
+        T3 = datetime.datetime.now()
+        history=model.fit(x=train_dataset,
+            validation_data=valid_dataset,
+            epochs=pars_h['epochs'],
+            verbose=2,shuffle=True,callbacks=Callbacks)
+        T4 = datetime.datetime.now()
+        print('Training time', T4 - T3)
+    else:
+        #########multi gpu-version
+        # Horovod: pin GPU to be used to process local rank (one GPU per process)
+        # gpus = tf.config.experimental.list_physical_devices('GPU')
+        # for gpu in gpus:
+        #     tf.config.experimental.set_memory_growth(gpu, True)
+        # if gpus:
+        #     tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
+        # Optimizer
+        scaled_lr = pars_h['learning_rate'] * hvd.size()
+        opt = tf.optimizers.Nadam(scaled_lr)
+        opt = hvd.DistributedOptimizer(opt)
+        # Horovod: Specify `experimental_run_tf_function=False` to ensure TensorFlow
+        # uses hvd.DistributedOptimizer() to compute gradients.
+        model.compile(loss='mse',
+                    optimizer=opt,
+                    # metrics=['accuracy'],
+                    metrics=metrics,
+                    experimental_run_tf_function=False)
+        callbacks = [
+        # Horovod: broadcast initial variable states from rank 0 to all other processes.
+        # This is necessary to ensure consistent initialization of all workers when
+        # training is started with random weights or restored from a checkpoint.
+        hvd.callbacks.BroadcastGlobalVariablesCallback(0),
+        # Horovod: average metrics among workers at the end of every epoch.
+        # Note: This callback must be in the list before the ReduceLROnPlateau,
+        # TensorBoard or other metrics-based callbacks.
+        hvd.callbacks.MetricAverageCallback(),
+        # Horovod: using `lr = 1.0 * hvd.size()` from the very beginning leads to worse final
+        # accuracy. Scale the learning rate `lr = 1.0` ---> `lr = 1.0 * hvd.size()` during
+        # the first three epochs. See https://arxiv.org/abs/1706.02677 for details.
+        hvd.callbacks.LearningRateWarmupCallback(initial_lr=scaled_lr, warmup_epochs=3, verbose=1),]
 
-    print('start of training')
-    T3 = datetime.datetime.now()
-    history=model.fit(x=x_train_,y=t_train_,
-        validation_data=(x_valid_,t_valid_),
-        batch_size=batch_size,
-        epochs=pars_h['epochs'],
-        verbose=2,shuffle=True,callbacks=Callbacks)
-    T4 = datetime.datetime.now()
-    print('Training time', T4 - T3)
+        # Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
+        if hvd.rank() == 0:
+            callbacks.append(tf.keras.callbacks.ModelCheckpoint('./checkpoint-{epoch}.h5'))
+        # Horovod: write logs on worker 0.
+        verbose = 1 if hvd.rank() == 0 else 0
+        # Train the model.
+        # Horovod: adjust number of steps based on number of GPUs.
+        # model.fit(dataset, steps_per_epoch=500 // hvd.size(), callbacks=callbacks, epochs=24, verbose=verbose)
+        history=model.fit(x=train_dataset,validation_data=valid_dataset,steps_per_epoch=500 // hvd.size(), callbacks=callbacks, epochs=pars_h['epochs'], verbose=verbose)
+        # model.fit(x=train_dataset,
+        #     validation_data=valid_dataset,
+        #     epochs=pars_h['epochs'],
+        #     verbose=2,shuffle=True,callbacks=callbacks)
     history = history.history
+    print(history)
     F_save_history_to_file(history,Keras_models_path,log_save_const)
     Model_to_load_const=log_save_const
 else:
@@ -218,7 +280,6 @@ F_calculate_misfits_across_files(list_all,list_test,list_train,list_valid,
     t_predicted_train,t_predicted_valid,t_predicted_test,
     1,Train_models,Test_models,Valid_models,print_flag=1,test_status=test_status)
 print('calculating misfits finished')
-
 
 # %%  plot losses
 Plot_loss(history, Title='log' +      str(log_save_const) + 'loss_mse', Save_pictures_path=Save_pictures_path, Save_flag=1)
@@ -384,3 +445,10 @@ T2 = datetime.datetime.now()
 print('Program execution time', T2 - T1)
 print("FINISH!")
 # %tensorboard --logdir {log_dir}
+
+#single gpu-version
+# history=model.fit(x=x_train_,y=t_train_,
+#     validation_data=(x_valid_,t_valid_),
+#     batch_size=batch_size,
+#     epochs=pars_h['epochs'],
+#     verbose=2,shuffle=True,callbacks=Callbacks)

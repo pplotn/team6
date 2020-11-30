@@ -4,7 +4,6 @@ from itertools import islice, tee
 # import m8r as sf
 from collections import Counter
 import datetime
-from pytictoc import TicToc
 import math
 import fnmatch
 import skimage
@@ -22,10 +21,10 @@ from matplotlib.transforms import Bbox, TransformedBbox, Affine2D
 from matplotlib import  tight_bbox
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy.matlib as npm
-import pandas as pd
+# import pandas as pd
 import itertools
 from itertools import islice
-import more_itertools
+# import more_itertools
 from collections import deque
 import h5py
 from scipy import signal
@@ -33,18 +32,21 @@ from scipy.ndimage.filters import gaussian_filter,gaussian_filter1d
 from scipy.ndimage.interpolation import map_coordinates
 from scipy.fftpack import fft2, ifft2
 from collections import namedtuple
-from sklearn.model_selection import train_test_split
 import random
 import os, sys
 from shutil import copyfile
 import time
 import subprocess
+import sklearn
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
+# from sklearn.externals import joblib
 from functools import reduce
-from joblib import Parallel, delayed
-from sklearn.externals import joblib
+
 
 import tensorflow as tf
 print('TensorFlow\t{}'.format(tf.__version__))
@@ -86,11 +88,11 @@ else:
     from tensorflow.keras.models import Model, load_model
     from tensorflow.keras.utils import multi_gpu_model,Sequence
     
-    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-    tf.compat.v1.disable_eager_execution()
+    # tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+    # tf.compat.v1.disable_eager_execution()
     from tensorflow.compat.v1 import ConfigProto
     from tensorflow.compat.v1 import InteractiveSession
-    
+    # Horovod: pin GPU to be used to process local rank (one GPU per process)
     # gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
     # sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 ###########################

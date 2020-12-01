@@ -7,7 +7,6 @@ from F_plotting import *
 from F_utils import *
 from F_models import *
 
-# tf.compat.v1.enable_eager_execution()         #for tf 2
 # %%     init paths parameters
 Save_pictures_path,local_dataset_path,Keras_models_path = F_init_paths()
 Record_data_flag='read_data_time_domain2'
@@ -15,8 +14,6 @@ Record_data_flag='read_data_time_domain2'
 # Load pretrained CNN weights=0,train CNN=1
 flag_train_model = 1
 flag_single_gpu=0
-if flag_train_model==0:
-    Model_to_load_const=1463
 if flag_single_gpu==0:
     import horovod.tensorflow.keras as hvd
     hvd.init()
@@ -188,21 +185,7 @@ if flag_train_model == True:
     train_dataset=train_dataset.shuffle(Nn+2000).batch(batch_size)
     valid_dataset=valid_dataset.shuffle(Nn+2000).batch(batch_size)
     if flag_single_gpu==1:
-        opt=tf.keras.optimizers.Nadam(learning_rate=pars_h['learning_rate'])
-        # opt=tf.keras.optimizers.SGD(learning_rate=pars_h['learning_rate'])
-        print(opt)
-        print(opt.lr)
-        model.compile(loss='mse', optimizer=opt, metrics=metrics)
-        # model.fit(dataset, steps_per_epoch=500 // hvd.size(), callbacks=callbacks, epochs=24, verbose=verbose)
-        # model.fit(dataset=train_dataset,validation_data=valid_dataset,steps_per_epoch=500 // hvd.size(), callbacks=callbacks, epochs=24, verbose=verbose)
-        print('start of training')
-        T3 = datetime.datetime.now()
-        history=model.fit(x=train_dataset,
-            validation_data=valid_dataset,
-            epochs=pars_h['epochs'],
-            verbose=2,shuffle=True,callbacks=Callbacks)
-        T4 = datetime.datetime.now()
-        print('Training time', T4 - T3)
+        a=1
     else:
         #########multi gpu-version
         # Horovod: pin GPU to be used to process local rank (one GPU per process)
